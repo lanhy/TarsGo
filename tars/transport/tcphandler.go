@@ -62,12 +62,12 @@ func (h *tcpHandler) Listen() (err error) {
 func (h *tcpHandler) handleConn(connSt *connInfo, pkg []byte) {
 	handler := func() {
 		defer atomic.AddInt32(&connSt.numInvoke, -1)
-		ctx := current.ContextWithTarsCurrent(context.Background())
-		ipPort := strings.Split(connSt.conn.RemoteAddr().String(), ":")
-		current.SetClientIPWithContext(ctx, ipPort[0])
-		current.SetClientPortWithContext(ctx, ipPort[1])
-		current.SetRecvPkgTsFromContext(ctx, time.Now().UnixNano()/1e6)
-
+// 		ctx := current.ContextWithTarsCurrent(context.Background())
+// 		ipPort := strings.Split(connSt.conn.RemoteAddr().String(), ":")
+// 		current.SetClientIPWithContext(ctx, ipPort[0])
+// 		current.SetClientPortWithContext(ctx, ipPort[1])
+// 		current.SetRecvPkgTsFromContext(ctx, time.Now().UnixNano()/1e6)
+		ctx := h.getConnContext(connSt)
 		rsp := h.ts.invoke(ctx, pkg)
 
 		cPacketType, ok := current.GetPacketTypeFromContext(ctx)
@@ -185,6 +185,17 @@ func (h *tcpHandler) CloseIdles(n int64) bool {
 	return allClosed
 }
 
+func (h *tcpHandler) getConnContext(connSt *connInfo) context.Context {
+	ctx := current.ContextWithTarsCurrent(context.Background())
+	ipPort := strings.Split(connSt.conn.RemoteAddr().String(), ":")
+	current.SetClientIPWithContext(ctx, ipPort[0])
+	current.SetClientPortWithContext(ctx, ipPort[1])
+	current.SetRecvPkgTsFromContext(ctx, time.Now().UnixNano()/1e6)
+
+	return ctx
+}
+
+
 func (h *tcpHandler) recv(connSt *connInfo) {
 	conn := connSt.conn
 	defer func() {
@@ -198,6 +209,10 @@ func (h *tcpHandler) recv(connSt *connInfo) {
 		}
 		TLOG.Debugf("Close connection: %v", conn.RemoteAddr())
 		conn.Close()
+		
+		ctx := h.getConnContext(connSt)
+		h.ts.svr.DoClose(ctx)
+
 		connSt.idleTime = 0
 	}()
 
